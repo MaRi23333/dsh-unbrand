@@ -10,14 +10,37 @@
 
 对选中的模型，隐标也会去掉 DSH 自动附上的源码位置和网页界面地址。你自己在对话里提到 DSH，模型仍会看到。聊天记录、工具和文件权限都不变。
 
+## 下载安装
+
+仅支持 **DSH Desktop 0.2.2-rc.1**。桌面版直接在插件页安装，无需打开终端。
+
+1. 在左侧栏打开 **插件 → 添加插件**，输入 `dsh-unbrand@latest`。要安装本版，输入 `dsh-unbrand@0.1.4`。
+2. 安装完成后点 **立即启用**。如果提示重启，从应用菜单选 **退出（Quit）**，再重新打开 DSH。
+3. 在 **设置 → 隐标** 看到插件入口，即已启用。
+
+**手动下载安装包：** [下载 dsh-unbrand-0.1.4.tgz](https://github.com/MaRi23333/dsh-unbrand/releases/download/v0.1.4/dsh-unbrand-0.1.4.tgz)，不用解压。在同一个「添加插件」框里输入下载文件的完整路径，再按上面的步骤启用。[查看 npm 包](https://www.npmjs.com/package/dsh-unbrand)
+
+<details>
+<summary>用桌面版命令行安装</summary>
+
+先启动一次 DSH Desktop，在应用菜单选 **Manage dsh Command… → Install**，然后退出桌面版。打开新终端，运行：
+
+```sh
+dsh plugin --profile desktop add dsh-unbrand@0.1.4
+dsh plugin --profile desktop list
+```
+
+看到 `dsh-unbrand@0.1.4` 后，重新打开桌面版并启用插件。请使用桌面版自带的 `dsh` 命令；通过 npm 或 `npx` 启动的独立 CLI 不能管理桌面插件。
+
+</details>
+
 ## 怎么用
 
-1. 在 **DSH Desktop 0.2.2-rc.1** 打开「插件 → 添加插件」，输入 `dsh-unbrand@0.1.4` 并启用。若提示重启，退出后重新打开 DSH。
-2. 在「设置 → 隐标」勾选你想使用通用启动词的模型，点「保存」。没勾选的模型照常使用默认启动词。
-3. 从下一次请求起生效，不用新开会话。想恢复默认提示，关掉隐标并保存即可。
+1. 在「设置 → 隐标」勾选你想使用通用启动词的模型，点「保存」。没勾选的模型照常使用默认启动词。
+2. 从下一次请求起生效，不用新开会话。想恢复默认提示，关掉隐标并保存即可。
 
 ![隐标设置页：搜索并勾选模型](./assets/settings-zh.png)
 
 *图中的模型目录为示例。*
 
-目前只支持上述桌面版本。[下载安装包](https://github.com/MaRi23333/dsh-unbrand/releases/tag/v0.1.4) · [其他安装方式和详细说明](https://github.com/MaRi23333/dsh-unbrand/blob/main/docs/usage.zh-CN.md) · [MIT 许可证](./LICENSE)
+[其他安装方式和详细说明](https://github.com/MaRi23333/dsh-unbrand/blob/main/docs/usage.zh-CN.md) · [MIT 许可证](./LICENSE)
