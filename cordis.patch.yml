@@ -1,0 +1,4 @@
+- insert:
+    - id: unbrand
+      name: dsh-unbrand
+      config: {}

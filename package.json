@@ -1,0 +1,63 @@
+{
+  "name": "dsh-unbrand",
+  "version": "0.1.4",
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
+  "repository": { "type": "git", "url": "git+https://github.com/MaRi23333/dsh-unbrand.git" },
+  "homepage": "https://github.com/MaRi23333/dsh-unbrand#readme",
+  "bugs": { "url": "https://github.com/MaRi23333/dsh-unbrand/issues" },
+  "description": "Use a neutral introduction instead of the default DeepSeek Harness prompt for selected models.",
+  "license": "MIT",
+  "keywords": ["deepseek-harness", "dsh-plugin", "model-context", "system-prompt"],
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "policy.js",
+    "settings.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.en.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "assets/settings-zh.png",
+    "assets/settings-en.png"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "verify:desktop": "node scripts/verify-desktop.mjs",
+    "check:pack": "node scripts/check-pack.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "3.19.0"
+  },
+  "engines": {
+    "node": ">=22.19.0",
+    "dsh": "0.2.2-rc.1"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-general",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
+    }
+  }
+}

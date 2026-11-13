@@ -1,0 +1,52 @@
+name: 问题报告 / Bug report
+description: 报告可复现的问题 / Report a reproducible problem
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先阅读 README 的兼容范围与限制。不要上传原始会话、完整配置、原始请求或完整日志；截图与片段先移除密钥、令牌、私聊、真实路径和个人标识。
+        Read the README's compatibility and limitations first. Do not upload raw conversations, full configurations, raw requests, or complete logs. Remove secrets, private messages, real paths, and personal identifiers from screenshots and excerpts.
+  - type: input
+    id: plugin-version
+    attributes:
+      label: 插件版本 / Plugin version
+      placeholder: "0.1.3"
+    validations:
+      required: true
+  - type: input
+    id: host-version
+    attributes:
+      label: DSH Desktop 精确版本 / Exact DSH Desktop version
+      placeholder: "0.2.2-rc.1"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统 / Operating system
+      placeholder: "Windows 11 / macOS / Linux"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 最小复现步骤 / Minimal reproduction steps
+      description: 使用合成内容和虚构模型 ID；说明规则是否已保存。 / Use synthetic content and fictional model IDs; state whether rules were saved.
+      placeholder: |
+        1. 添加虚构示例规则 / Add a fictional example rule: example-provider::vendor/model-a
+        2. 点击保存 / Click Save
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: 预期与实际行为 / Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 可选脱敏材料 / Optional redacted evidence
+      description: 仅提供相关错误片段或虚构数据截图，不要贴完整日志或配置。 / Share only relevant redacted errors or screenshots with fictional data, not full logs or configurations.

@@ -1,0 +1,12 @@
+node_modules/
+*.tgz
+HANDOFF.md
+.tmp/
+.oil-ui/
+.env
+.env.*
+.npmrc
+*.log
+coverage/
+.DS_Store
+Thumbs.db
