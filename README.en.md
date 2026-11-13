@@ -2,9 +2,9 @@
 
 [中文](./README.md) · **English**
 
-**Unbrand replaces the introduction DeepSeek Harness (DSH) sends to a model. You choose which models get the neutral wording.**
+**Unbrand helps you use third-party models with DeepSeek Harness (DSH).** Select a model to give it a neutral opening prompt in place of the default DSH introduction:
 
-| Default prompt | With Unbrand |
+| Default DSH prompt | What the selected model receives |
 | --- | --- |
 | `You are an AI agent powered by DeepSeek Harness.` | `You are an AI assistant.` |
 
@@ -13,7 +13,7 @@ For those models, Unbrand also removes the source location and web interface add
 ## Getting started
 
 1. In **DSH Desktop 0.2.2-rc.1**, open **Plugins → Add plugin**, enter `dsh-unbrand@0.1.4`, and enable it. If prompted, quit and reopen DSH.
-2. Open **Settings → Unbrand**, select a model, and click **Save**. No models are selected by default.
+2. Open **Settings → Unbrand**, select the models that should receive the neutral prompt, and click **Save**. All other models keep the default prompt.
 3. The next request uses the new wording, even in an existing chat. To restore the default prompt, turn Unbrand off and save.
 
 ![Unbrand settings showing how to search for and select a model](./assets/settings-en.png)
