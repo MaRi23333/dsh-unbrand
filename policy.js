@@ -93,7 +93,7 @@ function runtimeSnapshot(msg) {
       !sections.some(s => s.name === 'sandbox:policy' || locations.has(s.name))) return msg;
   // The host emits one text block. If another middleware has changed its
   // shape, do not infer offsets or rebuild it from potentially unredacted metadata.
-  if (msg.content.length !== 1 || msg.content[0].type !== 'text') return msg;
+  if (msg.content.length !== 1 || msg.content[0]?.type !== 'text' || typeof msg.content[0].text !== 'string') return msg;
   const block = msg.content[0], prefix = heading + '\n\n';
   if (!block.text.startsWith(prefix)) return msg;
   const body = block.text.slice(prefix.length);
@@ -139,7 +139,7 @@ function projectMessage(msg) {
   if (msg.role === 'user' && msg.source?.kind === 'agent-instructions') return projectInstructionHeading(msg);
   if (msg.role !== 'system' || msg.source?.kind !== 'system-prompt') return msg;
   const content = mapChanged(msg.content, block => {
-    if (block.type !== 'text') return block;
+    if (block?.type !== 'text' || typeof block.text !== 'string') return block;
     const text = systemText(block.text);
     return text === block.text ? block : like(block, {...block, text});
   });

@@ -1,5 +1,10 @@
 # 版本记录 · Changelog
 
+## 0.1.5 — 2026-11-14
+
+- Desktop 兼容要求改为最低 `0.2.2-rc.1`，允许后续预发布版与正式版。升级验证根据安装包的宿主接口和原厂提示词进行，陌生格式保留原样。
+- Accepts Desktop releases and prereleases from `0.2.2-rc.1` onward. The offline upgrade check verifies the host interface and stock prompts from the supplied archive. Unknown formats pass through unchanged.
+
 ## 0.1.4 — 首次公开发布 / First public release
 
 选定模型的沙箱说明保留原有权限与路径，仅去掉产品名。指令开头的全局 `AGENTS.md` 来源显示为用户全局规则；指令正文、项目路径、工具和技能保持原样。

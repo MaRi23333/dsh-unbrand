@@ -2,9 +2,11 @@
 
 ## 兼容与安装
 
-**隐标 0.1.4 仅支持 DSH Desktop 0.2.2-rc.1。** 插件用到了这个版本的内部接口；其他 Desktop 版本和独立 Web 部署尚不支持。
+0.1.5 起允许在 DSH Desktop `0.2.2-rc.1` 或更高版本加载，包括后续预发布版。最低版本是安装要求，并不表示每一版都已验证。插件只改识别出的宿主文案；格式改变时保留陌生片段。如果所需的模型接口缺失或已被其他插件接管，隐标不会接管请求。独立 Web 部署未验证。
 
-1. 在 DSH 桌面版打开「插件 → 添加插件」，输入 `dsh-unbrand@0.1.4`。也可以从 [GitHub Release](https://github.com/MaRi23333/dsh-unbrand/releases/tag/v0.1.4) 下载 `dsh-unbrand-0.1.4.tgz`，不解压，在同一处输入文件的完整路径。
+以下步骤安装 **0.1.5**。若 npm 暂未收录该版本，可直接使用同版本的 GitHub Release 安装包。
+
+1. 在 DSH 桌面版打开「插件 → 添加插件」，输入 `dsh-unbrand@0.1.5`。也可以从 [GitHub Release](https://github.com/MaRi23333/dsh-unbrand/releases/tag/v0.1.5) 下载 `dsh-unbrand-0.1.5.tgz`，不解压，在同一处输入文件的完整路径。
 2. 安装后启用插件；若提示重启，从应用菜单完全退出，再打开 DSH。
 3. 打开「设置 → 隐标」，勾选一个模型并保存。从下一次请求起生效。
 

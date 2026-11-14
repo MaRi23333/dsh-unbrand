@@ -1,6 +1,6 @@
 {
   "name": "dsh-unbrand",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
   "repository": { "type": "git", "url": "git+https://github.com/MaRi23333/dsh-unbrand.git" },
   "homepage": "https://github.com/MaRi23333/dsh-unbrand#readme",
@@ -45,7 +45,7 @@
   },
   "engines": {
     "node": ">=22.19.0",
-    "dsh": "0.2.2-rc.1"
+    "dsh": ">=0.2.2-rc.1"
   },
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },

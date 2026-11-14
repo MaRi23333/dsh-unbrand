@@ -106,7 +106,7 @@ async function smoke(directory) {
   assert.deepEqual(manifest.publishConfig, { access: 'public', registry: 'https://registry.npmjs.org/' });
   assert.equal(manifest.repository.url, 'git+https://github.com/MaRi23333/dsh-unbrand.git');
   assert.equal(manifest.engines.node, '>=22.19.0');
-  assert.equal(manifest.engines.dsh, '0.2.2-rc.1');
+  assert.equal(manifest.engines.dsh, '>=0.2.2-rc.1', 'Keep the minimum host version without pinning later releases');
   assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml');
   assert.equal(manifest.dsh.client.platform, 'web');
   const exports = {

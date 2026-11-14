@@ -1,8 +1,8 @@
 # 发布候选验证
 
-当前候选为 `dsh-unbrand@0.1.4`，适配 DSH Desktop `0.2.2-rc.1`。本项目无需编译，运行文件直接进入包。
+当前版本为 `dsh-unbrand@0.1.5`，DSH Desktop 最低版本为 `0.2.2-rc.1`，不设上限。本项目无需编译，运行文件直接进入包。
 
-CI 运行测试和打包检查，不会自动发布。Release 附件与 npm 使用同一份通过检查的 .tgz。
+CI 运行测试和打包检查。正式 GitHub Release 发布后，publish.yml 校验 annotated 标签、包名、版本和内容，再通过 npm Trusted Publishing 自动发布并生成 provenance；预发布与已存在版本不发布。Release 附件与 npm 均来自同一审核标签。启用前需由包所有者为本仓库的 publish.yml 绑定 Trusted Publisher，无需配置长期 npm 令牌。
 
 ## 独立 checkout
 
@@ -57,7 +57,7 @@ npm run verify:desktop -- --asar "/path/to/DSH/resources/app.asar"
 npm run verify:desktop -- --asar "/path/to/DSH/resources/app.asar" --out "/path/to/verification/desktop"
 ```
 
-输出目录只保留本次成功运行的 `REPORT.json`；同名旧报告会在检查开始时移除，失败不会留下旧的成功结论。每次使用全新的 `host-*` 子目录提取指定核心包及依赖，结束时清理该子目录，不复用历史模块缓存。检查拒绝归档路径逃逸和链接项；若宿主归档结构或 `0.2.2-rc.1` 内部边界发生变化，应先重新审查脚本契约。
+输出目录只保留本次成功运行的 `REPORT.json`；同名旧报告会在检查开始时移除，失败不会留下旧的成功结论。每次使用全新的 `host-*` 子目录提取指定核心包及依赖，结束时清理该子目录，不复用历史模块缓存。检查拒绝归档路径逃逸和链接项；每次 Desktop 升级可对新安装包运行此检查，不需先改版本号。若提示词、来源结构或模型分派行为有变化，结合失败项核对新模板，再更新相关规则或验证器。不要为了通过检查而对整份提示词做产品名替换。
 
 该集成使用提供的核心服务和内存适配器，阻断进程内网络入口；不启动 Desktop、读取真实配置、修改插件安装、重启宿主或调用真实模型。报告列出实际包版本、稳定投影、并发隔离、开关更新和卸载恢复等离线结果。它不等同于实际宿主或供应商验收，CI 不要求持有 Desktop 安装包。
 

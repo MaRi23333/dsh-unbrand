@@ -6,7 +6,7 @@ export const name = 'unbrand';
 export const inject = ['llm'];
 
 // The public stream hook cannot replace its arguments. Intercept only the
-// per-instance final presentation function on this exact Desktop release.
+// per-instance final presentation function when the host exposes its known shape.
 // No provider re-registration, nested call, prototype patch or transport change.
 function installProjection(service, matches) {
   const key = 'forAdapter', proto = Object.getPrototypeOf(service);
@@ -16,7 +16,7 @@ function installProjection(service, matches) {
   }
   let live = true;
   function present(options, adapter) {
-    const ready = Reflect.apply(original, this, [options, adapter]);
+    const ready = Reflect.apply(original, this, arguments);
     return live && matches(ready) ? presentRequest(ready) : ready;
   }
   Object.defineProperty(service, key, { configurable: true, writable: true, value: present });

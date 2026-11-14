@@ -12,13 +12,15 @@
 
 ## 下载安装
 
-仅支持 **DSH Desktop 0.2.2-rc.1**。桌面版直接在插件页安装，无需打开终端。
+**0.1.5 起**以 DSH Desktop `0.2.2-rc.1` 为最低版本，不锁定后续版本。宿主升级后，已知格式继续处理，不认识的提示词保留原文。
 
-1. 在左侧栏打开 **插件 → 添加插件**，输入 `dsh-unbrand@latest`。要安装本版，输入 `dsh-unbrand@0.1.4`。
+0.1.4 仍只适用于 rc.1。以下步骤安装 0.1.5；若 npm 暂未收录该版本，可直接使用下方的 GitHub Release 安装包。
+
+1. 在左侧栏打开 **插件 → 添加插件**，输入 `dsh-unbrand@0.1.5`，或输入下方安装包的完整路径。
 2. 安装完成后点 **立即启用**。如果提示重启，从应用菜单选 **退出（Quit）**，再重新打开 DSH。
 3. 在 **设置 → 隐标** 看到插件入口，即已启用。
 
-**手动下载安装包：** [下载 dsh-unbrand-0.1.4.tgz](https://github.com/MaRi23333/dsh-unbrand/releases/download/v0.1.4/dsh-unbrand-0.1.4.tgz)，不用解压。在同一个「添加插件」框里输入下载文件的完整路径，再按上面的步骤启用。[查看 npm 包](https://www.npmjs.com/package/dsh-unbrand)
+**手动下载安装包：** [下载 dsh-unbrand-0.1.5.tgz](https://github.com/MaRi23333/dsh-unbrand/releases/download/v0.1.5/dsh-unbrand-0.1.5.tgz)，不用解压。在同一个「添加插件」框里输入下载文件的完整路径，再按上面的步骤启用。[查看 npm 包](https://www.npmjs.com/package/dsh-unbrand)
 
 <details>
 <summary>用桌面版命令行安装</summary>
@@ -26,11 +28,11 @@
 先启动一次 DSH Desktop，在应用菜单选 **Manage dsh Command… → Install**，然后退出桌面版。打开新终端，运行：
 
 ```sh
-dsh plugin --profile desktop add dsh-unbrand@0.1.4
+dsh plugin --profile desktop add dsh-unbrand@0.1.5
 dsh plugin --profile desktop list
 ```
 
-看到 `dsh-unbrand@0.1.4` 后，重新打开桌面版并启用插件。请使用桌面版自带的 `dsh` 命令；通过 npm 或 `npx` 启动的独立 CLI 不能管理桌面插件。
+看到 `dsh-unbrand@0.1.5` 后，重新打开桌面版并启用插件。请使用桌面版自带的 `dsh` 命令；通过 npm 或 `npx` 启动的独立 CLI 不能管理桌面插件。
 
 </details>
 

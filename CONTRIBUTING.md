@@ -2,7 +2,7 @@
 
 **中文 | [English](#english)**
 
-欢迎提交可复现的问题、文档改进和代码修复。先看 [README](./README.md) 的范围与限制；本插件当前只支持 DSH Desktop `0.2.2-rc.1`。
+欢迎提交可复现的问题、文档改进和代码修复。先看 [README](./README.md) 的范围与限制；DSH Desktop 最低版本为 `0.2.2-rc.1`；宿主升级时使用下方的离线检查核对接口和实际生成的提示词。
 
 ## 报告问题
 
@@ -29,7 +29,7 @@ npm run verify:desktop -- --asar "/absolute/path/to/app.asar"
 
 ## English
 
-Bug reports, documentation improvements, and fixes are welcome. Read the scope and limitations in [README.en.md](./README.en.md) first. Only DSH Desktop `0.2.2-rc.1` is currently supported.
+Bug reports, documentation improvements, and fixes are welcome. Read the scope and limitations in [README.en.md](./README.en.md) first. The plugin requires DSH Desktop `0.2.2-rc.1` or later. When Desktop changes, use the offline check below to verify the request interface and the prompts that the host generates.
 
 For an issue, include the plugin version, exact Desktop version, operating system, minimal reproduction steps, expected result, and actual result. For model-selection issues, show rule syntax with fictional IDs such as `example-provider::vendor/model-a`, and state whether the settings were saved.
 

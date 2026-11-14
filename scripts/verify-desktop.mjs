@@ -114,33 +114,31 @@ function extractPackage(name) {
   copy(entry(archivePath), archivePath);
   for (const dependency of Object.keys(manifest.dependencies ?? {})) extractPackage(dependency);
 }
-for (const name of ['@deepseek-ai/cordis', '@deepseek-ai/dsh-scope', '@deepseek-ai/dsh-system-prompt', '@deepseek-ai/dsh-llm']) extractPackage(name);
-// Read fixed official prose without executing the dev-context plugin or web app.
+for (const name of ['@deepseek-ai/cordis', '@deepseek-ai/dsh-scope', '@deepseek-ai/dsh-system-prompt', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-harness-dev-context', '@deepseek-ai/dsh-sandbox-policy', '@deepseek-ai/dsh-sandbox', '@deepseek-ai/dsh-agent-instructions', '@deepseek-ai/dsh-home-paths']) extractPackage(name);
+// rc.3 imports this peer at runtime; earlier cores do not contain or need it.
+// Presence is only an extraction choice, never a compatibility verdict.
+if (header.files?.dsh?.files?.node_modules?.files?.['@deepseek-ai']?.files?.['dsh-error']) extractPackage('@deepseek-ai/dsh-error');
+// Only legacy prose lacks a public generator. Current prose is generated below
+// against synthetic services, without activating the web app or desktop entry.
 const fixtureSource = readEntry('dsh/node_modules/@deepseek-ai/dsh-harness-dev-context/lib/index.js').toString('utf8');
-function templateConstant(name) {
-  const raw = fixtureSource.match(new RegExp('const ' + name + ' = `([^\\r\\n]+)`;'))?.[1];
-  assert.ok(raw && !raw.includes('${') && !/\\(?!`)/.test(raw), `Re-audit the official ${name} literal`);
-  return raw.replace(/\\`/g, '`');
-}
 function legacyConstant(name) {
   const literal = fixtureSource.match(new RegExp('const ' + name + ' = \\{\\s*prefix: ("(?:\\\\.|[^"\\\\])*"),\\s*suffix: ("(?:\\\\.|[^"\\\\])*")\\s*\\};'));
   assert.ok(literal, `Re-audit the official ${name} literals`);
   return { prefix: JSON.parse(literal[1]), suffix: JSON.parse(literal[2]) };
 }
-const sourcePrompt = templateConstant('HARNESS_SOURCE_PROMPT');
-const webPrompt = templateConstant('WEB_SURFACE_PROMPT');
+// These archived legacy paragraphs have no public generator. Accept only the
+// simple literal object above; never eval source text or guess at new shapes.
 const legacySource = legacyConstant('LEGACY_SOURCE');
 const legacyWeb = legacyConstant('LEGACY_WEB_SURFACE');
 fs.closeSync(fd);
 fd = undefined;
 const hostImport = (name) => import(pathToFileURL(path.join(hostRoot, 'dsh/node_modules', name, 'lib/index.js')).href);
 const { Context } = await hostImport('@deepseek-ai/cordis');
-const { SystemPrompt, renderPrompt, renderContextSnapshot } = await hostImport('@deepseek-ai/dsh-system-prompt');
+const { SystemPrompt, renderPrompt, renderContextSnapshot, joinContextSections } = await hostImport('@deepseek-ai/dsh-system-prompt');
 const { LlmRuntime, LlmAdapter, freezeMessage } = await hostImport('@deepseek-ai/dsh-llm');
-assert.equal(extracted.get('@deepseek-ai/dsh-llm'), '0.2.2-rc.1', 'Re-audit the forAdapter boundary for a different host version');
-const runtimeSource = fs.readFileSync(path.join(hostRoot, 'dsh/node_modules/@deepseek-ai/dsh-llm/lib/index.js'), 'utf8');
-assert.ok(runtimeSource.includes('dispatch(this.forAdapter(projectedOptions, adapter))'), 'Expected final projection boundary is missing');
-
+const { apply: applyDevContext } = await hostImport('@deepseek-ai/dsh-harness-dev-context');
+const { SandboxPolicyService } = await hostImport('@deepseek-ai/dsh-sandbox-policy');
+const { renderAgentInstructions } = await hostImport('@deepseek-ai/dsh-agent-instructions');
 
 const provider = 'offline-provider';
 const targetModel = 'example-vendor/model-a';
@@ -148,9 +146,21 @@ const otherModel = 'other-model';
 const models = [targetModel];
 const cases = [];
 const ctx = new Context();
+// Synthetic projection state only: no profile, instruction file, or session log.
+ctx.provide('sessionProjections', { register: async spec => ({ stateOf: session => spec.key === 'sandboxMode' ? session.offlineMode : spec.init() }) });
 const llmFiber = ctx.plugin(LlmRuntime);
 const promptFiber = ctx.plugin(SystemPrompt, {});
 await Promise.all([llmFiber, promptFiber]);
+await applyDevContext({
+  systemPrompt: ctx.systemPrompt,
+  sessionProjections: ctx.sessionProjections,
+  webApp: { getAdvertisedUrl: () => 'https://offline.invalid/PRIVATE_WEB_MARKER' },
+});
+const sandboxFiber = ctx.plugin(SandboxPolicyService, {
+  mode: 'read-only', workspaceRoot: path.resolve(tempRoot, 'DSH-workspace'),
+  additionalWritableRoots: [path.resolve(tempRoot, 'DeepSeek Harness-extra')],
+});
+await sandboxFiber;
 const llm = ctx.llm;
 const originalDescriptor = Object.getOwnPropertyDescriptor(llm, 'forAdapter');
 const originalPrototypeDescriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(llm), 'forAdapter');
@@ -175,16 +185,9 @@ class OfflineAdapter extends LlmAdapter {
 }
 const unregister = llm.registerAdapter([provider], new OfflineAdapter());
 ctx.on('llm/stream', (_options, next) => { waterfallEntries++; return next(); });
-const sourceLine = 'Current DeepSeek Harness implementation checkout: ' + JSON.stringify('PRIVATE_SOURCE_MARKER') + '.';
-const webLine = 'Current DeepSeek Harness Web GUI URL: ' + JSON.stringify('PRIVATE_WEB_MARKER') + '.';
 const sourceLegacyText = legacySource.prefix + JSON.stringify('PRIVATE_LEGACY_SOURCE') + legacySource.suffix;
 const webLegacyText = legacyWeb.prefix + JSON.stringify('PRIVATE_LEGACY_WEB') + legacyWeb.suffix;
-const identity = 'You are an AI agent powered by DeepSeek Harness.';
-ctx.systemPrompt.section({ name: 'harness:source', order: 10000, interpolate: false, text: sourcePrompt });
-ctx.systemPrompt.section({ name: 'app:web-surface', order: 10100, interpolate: false, text: webPrompt });
 ctx.systemPrompt.section({ name: 'safety:policy', order: 100, text: 'DSH requires confirmation before destructive writes.' });
-ctx.systemPrompt.context({ name: 'harness:source', order: 200, interpolate: false, text: sourceLine });
-ctx.systemPrompt.context({ name: 'app:web-surface', order: 210, interpolate: false, text: webLine });
 ctx.systemPrompt.context({ name: 'approval:policy', order: 115, required: true, text: 'Preserve approval requirements.' });
 ctx.systemPrompt.tools(() => ({ schemas: [{
   name: 'offline_inspect', description: 'Inspect a path through DeepSeek Harness. Keep paths unchanged.',
@@ -192,6 +195,68 @@ ctx.systemPrompt.tools(() => ({ schemas: [{
 }] }));
 const assemble = (model = targetModel) => ctx.systemPrompt.assemble({ modelSelection: { provider, model } });
 const baselineAssembly = await assemble();
+function uniqueText(items, name) {
+  const matches = items.filter(item => item.name === name);
+  assert.equal(matches.length, 1, `Unsupported host prompt shape: expected one ${name}`);
+  assert.equal(typeof matches[0].text, 'string', `Unsupported host prompt text: ${name}`);
+  return matches[0].text;
+}
+const identity = uniqueText(baselineAssembly.sections, 'harness:identity');
+assert.equal(identity, 'You are an AI agent powered by DeepSeek Harness.', 'Unsupported host identity prose; re-audit projection');
+const sourcePrompt = uniqueText(baselineAssembly.sections, 'harness:source');
+const webPrompt = uniqueText(baselineAssembly.sections, 'app:web-surface');
+const sourceLine = uniqueText(baselineAssembly.contexts, 'harness:source');
+const webLine = uniqueText(baselineAssembly.contexts, 'app:web-surface');
+assert.match(sourceLine, /^Current DeepSeek Harness implementation checkout: "(?:[^"\\\x00-\x1f]|\\(?:["\\/bfnrt]|u[\da-fA-F]{4}))*"\.$/, 'Unsupported source location prose');
+assert.match(webLine, /^Current DeepSeek Harness Web GUI URL: "(?:[^"\\\x00-\x1f]|\\(?:["\\/bfnrt]|u[\da-fA-F]{4}))*"\.$/, 'Unsupported web location prose');
+function replaceOnce(text, from, to, label) {
+  assert.equal(text.split(from).length, 2, `Unsupported ${label} prose; expected one recognized target`);
+  return text.replace(from, to);
+}
+function expectedDevPrompt(text, kind, legacy = false) {
+  const source = kind === 'source';
+  let expected = replaceOnce(text,
+    legacy ? (source ? legacySource.prefix + JSON.stringify('PRIVATE_LEGACY_SOURCE') + '.' : legacyWeb.prefix + JSON.stringify('PRIVATE_LEGACY_WEB') + '.')
+      : source ? 'The runtime context names the DeepSeek Harness implementation checkout.' : 'You are interacting with the user through the DeepSeek Harness Web GUI whose URL the runtime context names.',
+    source ? 'Treat the application source and the workspace as distinct locations.' : 'The user is interacting through a web interface.', kind + ' opening');
+  expected = replaceOnce(expected,
+    source ? 'Use this checkout only to inspect or extend DSH itself.' : 'because only dsh web injects window.__DSH_BOOT__.',
+    source ? 'Use this checkout only to inspect or extend the application itself.' : 'because its boot data is supplied by the running application.', kind + ' body');
+  assert.ok(!/DeepSeek Harness|\bDSH\b|__DSH_BOOT__/.test(expected), `Unsupported additional branding in ${kind} prose; re-audit projection`);
+  return expected;
+}
+const expectedSource = expectedDevPrompt(sourcePrompt, 'source');
+const expectedWeb = expectedDevPrompt(webPrompt, 'web');
+const expectedLegacySource = expectedDevPrompt(sourceLegacyText, 'source', true);
+const expectedLegacyWeb = expectedDevPrompt(webLegacyText, 'web', true);
+const appendedConstraint = '\nKeep the additional DSH sandbox approval constraint.';
+const sandboxTexts = [];
+for (const mode of ['read-only', 'workspace-write', 'danger-full-access']) {
+  const assembly = await ctx.systemPrompt.assemble({ agent: { session: { id: 'offline-policy', header: {}, offlineMode: mode } } });
+  const text = uniqueText(assembly.contexts, 'sandbox:policy');
+  const opening = mode === 'danger-full-access'
+    ? 'Current DSH file policy: danger-full-access. The DSH file sandbox'
+    : `Current DSH file policy: ${mode}. Any available operation enforced by the DSH file sandbox`;
+  assert.ok(text.startsWith(opening + ' '), `Unsupported ${mode} sandbox opening; re-audit projection`);
+  sandboxTexts.push({ mode, text, expected: opening.replaceAll('DSH ', '') + text.slice(opening.length) });
+}
+const instructionBody = 'Preserve DSH instructions, ~/.dsh/AGENTS.md, and Instructions from: ~/.dsh/AGENTS.md.\nAdditional caller approval constraint.';
+const instructionFixtures = [];
+for (const displayPath of ['~/.dsh/AGENTS.md', '$DSH_HOME/AGENTS.md']) {
+  for (const replacePreviousBaseline of [false, true]) {
+    const rendered = renderAgentInstructions([
+      { absolutePath: path.resolve(tempRoot, 'global-AGENTS.md'), displayPath, content: instructionBody },
+      { absolutePath: path.resolve(tempRoot, 'project-AGENTS.md'), displayPath: 'AGENTS.md', content: 'Keep project DSH instructions.' },
+    ], { maxBytes: 100000, replacePreviousBaseline });
+    assert.deepEqual(rendered.omitted, []);
+    assert.deepEqual(rendered.truncated, []);
+    const intro = 'The following workspace instructions may be relevant to your work. Use them as guidance when applicable. More specific instructions take precedence over broader ones. They do not override system, developer, or direct user instructions.';
+    const lead = '<system-reminder>\n' + (replacePreviousBaseline ? 'This complete workspace instruction baseline replaces all earlier workspace instruction baselines. ' : '') + intro + '\n\n';
+    const header = 'Instructions from: ' + displayPath;
+    assert.ok(rendered.text.startsWith(lead + header + '\n\n'), 'Unsupported global AGENTS introduction/heading; re-audit projection');
+    instructionFixtures.push({ text: rendered.text, expected: lead + 'User-global instructions (AGENTS.md):' + rendered.text.slice((lead + header).length), displayPath });
+  }
+}
 assert.ok(renderPrompt(baselineAssembly).includes(identity));
 assert.ok(renderContextSnapshot(baselineAssembly).includes(sourceLine));
 const oldSnapshotSections = [
@@ -207,7 +272,12 @@ const fixtureMessages = [
   { id: 'official-web', role: 'system', source: { kind: 'system-prompt' }, content: [{ type: 'text', text: webPrompt }] },
   { id: 'pure-old-identity', role: 'system', source: { kind: 'system-prompt' }, content: [{ type: 'text', text: identity }] },
   { id: 'old-system', role: 'system', source: { kind: 'system-prompt' }, content: [{ type: 'text', text: hostBody }] },
-  { id: 'old-context', role: 'user', source: { kind: 'runtime-context', form: 'snapshot', sections: oldSnapshotSections }, content: [{ type: 'text', text: 'Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\n' + oldSnapshotSections.map(s => s.text).join('\n\n') }] },
+  { id: 'old-context', role: 'user', source: { kind: 'runtime-context', form: 'snapshot', sections: oldSnapshotSections }, content: [{ type: 'text', text: joinContextSections(oldSnapshotSections) }] },
+  ...sandboxTexts.map(({ mode, text }) => {
+    const sections = [{ name: 'sandbox:policy', text: text + appendedConstraint }, { name: 'approval:policy', text: customSystem }];
+    return { id: 'sandbox-' + mode, role: 'user', source: { kind: 'runtime-context', form: 'snapshot', sections }, content: [{ type: 'text', text: joinContextSections(sections) }] };
+  }),
+  ...instructionFixtures.map(({ text, displayPath }, index) => ({ id: 'instructions-' + index, role: 'user', source: { kind: 'agent-instructions', form: 'instructions', baseline: true, changes: [{ scope: 'user-global\0AGENTS.md', path: displayPath, action: 'set' }] }, content: [{ type: 'text', text }] })),
   { id: 'user', role: 'user', source: { kind: 'human' }, content: [{ type: 'text', text: 'User text: DeepSeek Harness, DSH, PRIVATE_SOURCE_MARKER.' }] },
   { id: 'assistant', role: 'assistant', source: { kind: 'model', provider, model: targetModel, replayState: { immutable: 'DSH opaque replay' } }, content: [{ type: 'text', text: 'Assistant text about DSH stays literal.' }] },
   { id: 'tool', role: 'tool', source: { kind: 'tool', callId: 'call-1' }, toolCallId: 'call-1', content: [{ type: 'text', text: 'Tool output: DeepSeek Harness stays literal.' }] },
@@ -251,6 +321,7 @@ function assertProjected(seen) {
   const message = id => seen.messages.find(m => m.id === id);
   assert.equal(message('pure-old-identity').content[0].text, 'You are an AI assistant.');
   const hostText = message('old-system').content[0].text;
+  assert.equal(hostText, ['You are an AI assistant.', expectedSource, expectedWeb, expectedLegacySource + '\nKeep the additional system source constraint.', expectedLegacyWeb + '\nKeep the additional system web constraint.', customSystem].join('\n\n'), 'All official prose changes are exact; the complete remaining body is preserved');
   assert.ok(!hostText.includes(identity));
   assert.ok(!hostText.includes('The runtime context names the DeepSeek Harness implementation checkout.'));
   assert.ok(!hostText.includes('You are interacting with the user through the DeepSeek Harness Web GUI'));
@@ -258,6 +329,8 @@ function assertProjected(seen) {
   for (const guidance of ['Use pwd to determine the current working directory.', 'The browser provides no implicit DOM, route, or screenshot context.', 'Do not start a replacement server unless the user asks', 'verify that watcher before promising automatic updates.', 'requires rebuilding the affected Web artifacts']) assert.ok(hostText.includes(guidance), guidance);
   const officialSource = message('official-source').content[0].text;
   const officialWeb = message('official-web').content[0].text;
+  assert.equal(officialSource, expectedSource, 'Current source body is preserved exactly outside the recognized targets');
+  assert.equal(officialWeb, expectedWeb, 'Current web body is preserved exactly outside the recognized targets');
   assert.ok(officialSource.includes('Use pwd to determine the current working directory.'));
   assert.ok(!officialSource.includes('Use this checkout only to inspect or extend DSH itself.'));
   assert.ok(!officialWeb.includes('only dsh web injects window.__DSH_BOOT__'));
@@ -269,6 +342,18 @@ function assertProjected(seen) {
   assert.ok(snapshotText.includes('Keep the additional source approval constraint.'));
   assert.ok(snapshotText.includes('Preserve approval requirements.'));
   assert.ok(snapshotText.includes('Current DeepSeek Harness Web GUI URL: unquoted caller prose must remain.'));
+  assert.deepEqual(message('old-context').source.sections, [oldSnapshotSections[0], { name: 'harness:source', text: 'Keep the additional source approval constraint.' }, oldSnapshotSections[3]]);
+  for (const { mode, expected } of sandboxTexts) {
+    const projected = message('sandbox-' + mode);
+    const sections = [{ name: 'sandbox:policy', text: expected + appendedConstraint }, { name: 'approval:policy', text: customSystem }];
+    assert.deepEqual(projected.source.sections, sections, `${mode}: only the fixed sandbox opening changes; paths, roots, platform guidance and extra constraints stay literal`);
+    assert.equal(projected.content[0].text, joinContextSections(sections));
+  }
+  for (const [index, { expected }] of instructionFixtures.entries()) {
+    const projected = message('instructions-' + index);
+    assert.equal(projected.content[0].text, expected, 'Only the first global AGENTS heading changes; intro, file body and project heading stay literal');
+    assert.deepEqual(projected.source, fixtureMessages.find(m => m.id === projected.id).source, 'Instruction provenance remains unchanged');
+  }
   for (const id of ['user', 'assistant', 'tool', 'skill-catalog', 'skill-body', 'unowned-system']) assert.deepEqual(message(id), fixtureMessages.find(m => m.id === id), `${id} content and provenance remain unchanged`);
   assert.deepEqual(seen.tools, baselineAssembly.tools, 'Every tool/schema description remains literal');
 }
@@ -287,6 +372,7 @@ try {
   assertProjected(first.seen);
   assert.throws(() => first.handle.stream(request()), /only be dispatched once/);
   cases.push('prepared call: owned prose projected once, extra constraints and all tools/skills preserved');
+  cases.push('archive-generated prose: identity, source/web bodies and location lines, all three sandbox modes, both global AGENTS introductions and paths; exact remaining text preserved');
   const retry = await run(request(), true);
   assertProjected(retry.seen);
   assert.equal(JSON.stringify(retry.seen), JSON.stringify(first.seen), 'Equal effective input retains a stable serialized prefix');
@@ -349,7 +435,7 @@ try {
   assert.equal(blockedNetworkAttempts, 0);
   const report = {
     hostVersion: extracted.get('@deepseek-ai/dsh-llm'),
-    fixtureSource: '@deepseek-ai/dsh-harness-dev-context/lib/index.js from supplied app.asar',
+    fixtureSource: 'Real SystemPrompt identity, dev-context apply, SandboxPolicyService and renderAgentInstructions from supplied app.asar; legacy literals parsed as strict JSON objects without eval',
     packages: Object.fromEntries(extracted), cases,
     adapter: { type: 'in-memory fake adapter', preparations, dispatches, waterfallEntries, networkCalls: 0, blockedNetworkAttempts },
     boundary: 'Real core services from supplied app.asar; no desktop entrypoint, real config, plugin installation, desktop restart, provider serialization, or real model call. Settings updates use isolated Cordis fiber updates.',
@@ -359,6 +445,7 @@ try {
 } finally {
   if (privacyFiber) await privacyFiber.dispose();
   unregister();
+  await sandboxFiber.dispose();
   await promptFiber.dispose();
   await llmFiber.dispose();
 }

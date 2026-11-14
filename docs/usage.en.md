@@ -2,9 +2,11 @@
 
 ## Compatibility and installation
 
-**Unbrand 0.1.4 supports DSH Desktop 0.2.2-rc.1 only.** It uses an internal interface from this version. Other Desktop releases and standalone Web deployments are not supported.
+Unbrand 0.1.5 and later accept DSH Desktop `0.2.2-rc.1` or later, including later prereleases. This minimum is an installation requirement, not a list of tested versions. Unrecognized prompt text passes through unchanged. If the required model interface is missing or already owned by another plugin, Unbrand does not take it over. Standalone Web deployments have not been verified.
 
-1. In DSH Desktop, open **Plugins → Add plugin** and enter `dsh-unbrand@0.1.4`. Alternatively, download `dsh-unbrand-0.1.4.tgz` from the [GitHub release](https://github.com/MaRi23333/dsh-unbrand/releases/tag/v0.1.4) and enter its full path without extracting it.
+These steps install **0.1.5**. If that version is not yet available on npm, use the matching GitHub Release archive.
+
+1. In DSH Desktop, open **Plugins → Add plugin** and enter `dsh-unbrand@0.1.5`. Alternatively, download `dsh-unbrand-0.1.5.tgz` from the [GitHub release](https://github.com/MaRi23333/dsh-unbrand/releases/tag/v0.1.5) and enter its full path without extracting it.
 2. Enable the plugin. If prompted to restart, quit DSH from its application menu and reopen it.
 3. Open **Settings → Unbrand**, select a model, and save. The change applies to the next request.
 

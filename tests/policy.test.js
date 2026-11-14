@@ -77,6 +77,16 @@ test('unknown layouts or upstream redactions are never rebuilt from private meta
   }
 });
 
+test('unrecognized host copy and future text-block shapes pass through without interrupting a request', () => {
+  const futureIdentity = 'Under DeepSeek Harness, you work as a project assistant.';
+  const msg = sys(futureIdentity);
+  msg.content.push(null, {type:'text',text:{value:futureIdentity}}, {type:'new-block',body:futureIdentity});
+  const runtime = snapshot([{name:'app:web-surface',text:webValue}]);
+  runtime.content = [{type:'text',text:[{value:'future encoding'}]}];
+  const request = freeze({messages:[msg,runtime]});
+  assert.strictEqual(presentRequest(request),request);
+});
+
 test('sandbox branding is removed only from the stock opening, never from permissions or paths', () => {
   const shared = 'Current DSH file policy: ';
   const modes = [
