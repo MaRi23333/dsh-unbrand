@@ -13,7 +13,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const expected = [
   'CHANGELOG.md', 'CONTRIBUTING.md', 'LICENSE', 'README.en.md', 'README.md', 'SECURITY.md', 'THIRD_PARTY_NOTICES.md',
   'assets/settings-en.png', 'assets/settings-zh.png',
-  'client.js', 'cordis.patch.yml', 'icon.svg', 'index.js',
+  'adaptive.js', 'client.js', 'cordis.patch.yml', 'icon.svg', 'index.js',
   'locale/en.json', 'locale/zh.json', 'package.json', 'policy.js', 'settings.js',
 ].sort();
 const work = fs.mkdtempSync(path.join(tmpdir(), 'dsh-unbrand-pack-'));
@@ -134,6 +134,13 @@ async function smoke(directory) {
     llm, fiber,
     effect(setup) { hostDisposers.push(setup()); },
     inject(names, setup) {
+      if (names.length === 1 && names[0] === 'systemPrompt') {
+        return setup({on(event, listener) {
+          assert.equal(event, 'system-prompt/assemble');
+          assert.equal(typeof listener, 'function');
+          return () => {};
+        }});
+      }
       assert.deepEqual(names, ['settings']);
       return setup({
         effect(effect) { hostDisposers.push(effect()); },

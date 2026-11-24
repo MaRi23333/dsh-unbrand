@@ -31,7 +31,89 @@ function projectLine(line) {
   return line;
 }
 
-function systemText(text) {
+// Fallback only for producer-owned prose. Keep commands, code, quoted paths and
+// lines with unquoted filesystem paths literal; those may still be actionable.
+function neutralProse(text) {
+  const brand = /\bDeepSeek[ \t]+Harness\b/giu;
+  const prose = value => value.replace(brand, (name, offset) => {
+    const before = value.slice(0, offset).match(/\S*$/)[0];
+    const after = value.slice(offset + name.length).match(/^\S*/)[0];
+    // A relative path can start with the product name and contain spaces.
+    return /[\\/]/.test(before + after) || /^\.[A-Za-z0-9]/.test(after) ? name : 'the application';
+  });
+  let fence;
+  return text.split(/(\r?\n)/).map(line => {
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (marker) {
+      if (!fence) fence = marker[1];
+      else if (marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = undefined;
+      return line;
+    }
+    if (fence || /^(?: {4}| {0,3}\t)/.test(line) ||
+        /(?:^|\s)(?:[A-Za-z]:[\\/]|\.{0,2}\/|~[\\/])/.test(line)) return line;
+    // Preserve inline code and path-like quoted values. Quoted product names
+    // alone are prose, and therefore receive the same neutral name.
+    let result = '', offset = 0;
+    const tokens = /`+|"(?:\\.|[^"\\])*"|'[^'\r\n]*'/g;
+    for (let match; (match = tokens.exec(line));) {
+      result += prose(line.slice(offset, match.index));
+      if (match[0][0] === '`') {
+        const marker = match[0];
+        let close = line.indexOf(marker, tokens.lastIndex);
+        while (close !== -1 && (line[close - 1] === '`' || line[close + marker.length] === '`')) {
+          close = line.indexOf(marker, close + 1);
+        }
+        // Also preserve an unfinished code span instead of guessing its extent.
+        offset = close === -1 ? line.length : close + marker.length;
+        result += line.slice(match.index, offset);
+        tokens.lastIndex = offset;
+      } else {
+        result += /[\\/]/.test(match[0]) ? match[0] : prose(match[0]);
+        offset = tokens.lastIndex;
+      }
+    }
+    return result + prose(line.slice(offset));
+  }).join('');
+}
+
+function learnedSystemText(text, templates) {
+  const edits = [];
+  for (const from of templates) {
+    if (typeof from !== 'string' || !from) continue;
+    const start = text.indexOf(from), end = start + from.length;
+    if (start < 0 || text.indexOf(from, start + 1) !== -1 ||
+        (start !== 0 && !/\r?\n\r?\n$/.test(text.slice(0, start))) ||
+        (end !== text.length && !/^\r?\n\r?\n/.test(text.slice(end)))) continue;
+    // An exact paragraph inside a fenced example is not a host introduction.
+    let fence;
+    for (const line of text.slice(0, start).split(/\r?\n/)) {
+      const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+      if (!marker) continue;
+      if (!fence) fence = marker[1];
+      else if (marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) fence = undefined;
+    }
+    if (fence) continue;
+    edits.push({start, end});
+  }
+  edits.sort((a,b) => a.start - b.start || b.end - a.end);
+  // Merge overlapping learned ranges, so learning an adjacent template cannot
+  // hide the tail of an earlier one and restore its original branding.
+  const ranges = [];
+  for (const edit of edits) {
+    const last = ranges.at(-1);
+    if (last && edit.start <= last.end) last.end = Math.max(last.end, edit.end);
+    else ranges.push({...edit});
+  }
+  let result = '', offset = 0;
+  for (const range of ranges) {
+    result += text.slice(offset, range.start) + neutralProse(systemText(text.slice(range.start, range.end)));
+    offset = range.end;
+  }
+  return result + text.slice(offset);
+}
+
+function systemText(text, templates = []) {
+  if (templates.length) text = learnedSystemText(text, templates);
   if (!text.includes('DeepSeek Harness')) return text;
   // Rendered sections are separated by blank lines. Do not rewrite quotations
   // in the middle of another paragraph, indented commands, or fenced examples.
@@ -67,10 +149,10 @@ const locations = new Map([
 const sandboxOpening = /^Current DSH file policy: (?:(?:read-only|workspace-write)\. Any available operation enforced by the DSH file sandbox|danger-full-access\. The DSH file sandbox)(?= )/;
 function projectSection(name, text) {
   if (name === 'sandbox:policy') {
-    return text.replace(sandboxOpening, opening => opening.replaceAll('DSH ', ''));
+    return neutralProse(text.replace(sandboxOpening, opening => opening.replaceAll('DSH ', '')));
   }
   const pattern = locations.get(name);
-  return pattern ? text.replace(pattern, '') : text;
+  return pattern ? neutralProse(text.replace(pattern, '')) : text;
 }
 
 // Share untouched values. When the host supplies frozen envelopes, replacements
@@ -94,20 +176,33 @@ function runtimeSnapshot(msg) {
   // The host emits one text block. If another middleware has changed its
   // shape, do not infer offsets or rebuild it from potentially unredacted metadata.
   if (msg.content.length !== 1 || msg.content[0]?.type !== 'text' || typeof msg.content[0].text !== 'string') return msg;
-  const block = msg.content[0], prefix = heading + '\n\n';
-  if (!block.text.startsWith(prefix)) return msg;
-  const body = block.text.slice(prefix.length);
-  if (sections.map(s => s.text).join('\n\n') !== body) {
-    // Alignment is ambiguous after a redaction: leave the whole message as
-    // supplied. Even identical text may belong to an unrelated section.
-    return msg;
+  const block = msg.content[0];
+  const joined = sections.map(s => s.text).join('\n\n');
+  if (!joined) return msg;
+  const literal = text => text;
+  // The actual agent loop escapes closing reminder tags; its introductory text
+  // is not the system-prompt helper's legacy heading. Align the whole body by
+  // provenance instead of identifying a particular wrapper or version.
+  const escapeReminder = text => text.replace(/<\/system-reminder\s*>/gi, tag => '<\\' + tag.slice(1));
+  let aligned;
+  for (const encode of [literal, escapeReminder]) {
+    const body = encode(joined), start = block.text.indexOf(body);
+    if (start >= 0 && block.text.indexOf(body, start + 1) === -1) {
+      aligned = {encode, start, end:start + body.length};
+      break;
+    }
   }
+  // Never resurrect upstream-redacted text or guess at an ambiguous occurrence.
+  if (!aligned) return msg;
   const kept = mapChanged(sections, s => {
     const value = projectSection(s.name, s.text);
     return value === s.text ? s : value ? like(s, {...s, text: value}) : undefined;
   });
-  if (kept === sections) return msg;
-  const text = kept.length ? prefix + kept.map(s => s.text).join('\n\n') : cleared;
+  const prefix = block.text.slice(0, aligned.start), suffix = block.text.slice(aligned.end);
+  if (kept === sections && neutralProse(prefix) === prefix && neutralProse(suffix) === suffix) return msg;
+  const text = kept.length
+    ? neutralProse(prefix) + aligned.encode(kept.map(s => s.text).join('\n\n')) + neutralProse(suffix)
+    : prefix === heading + '\n\n' && !suffix ? cleared : neutralProse(prefix) + cleared + neutralProse(suffix);
   const content = like(msg.content, [like(block, {...block, text})]);
   return like(msg, {...msg, content, source: like(msg.source, {...msg.source, sections: kept})});
 }
@@ -133,21 +228,21 @@ function projectInstructionHeading(msg) {
   return msg;
 }
 
-function projectMessage(msg) {
+function projectMessage(msg, templates) {
   if (!Array.isArray(msg?.content)) return msg;
   if (msg.role === 'user' && msg.source?.kind === 'runtime-context') return runtimeSnapshot(msg);
   if (msg.role === 'user' && msg.source?.kind === 'agent-instructions') return projectInstructionHeading(msg);
   if (msg.role !== 'system' || msg.source?.kind !== 'system-prompt') return msg;
   const content = mapChanged(msg.content, block => {
     if (block?.type !== 'text' || typeof block.text !== 'string') return block;
-    const text = systemText(block.text);
+    const text = systemText(block.text, templates);
     return text === block.text ? block : like(block, {...block, text});
   });
   return content === msg.content ? msg : like(msg, {...msg, content});
 }
 
-export function presentRequest(request) {
+export function presentRequest(request, templates = []) {
   if (!Array.isArray(request.messages)) return request;
-  const messages = mapChanged(request.messages, projectMessage);
+  const messages = mapChanged(request.messages, msg => projectMessage(msg, templates));
   return messages === request.messages ? request : like(request, {...request, messages});
 }

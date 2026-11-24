@@ -11,6 +11,7 @@ import net from 'node:net';
 import tls from 'node:tls';
 import dgram from 'node:dgram';
 import { tmpdir } from 'node:os';
+import { compileFunction, createContext } from 'node:vm';
 
 const pluginDir = fileURLToPath(new URL('../', import.meta.url));
 const args = new Map();
@@ -130,15 +131,63 @@ function legacyConstant(name) {
 // simple literal object above; never eval source text or guess at new shapes.
 const legacySource = legacyConstant('LEGACY_SOURCE');
 const legacyWeb = legacyConstant('LEGACY_WEB_SURFACE');
+// AgentLoop owns the current reminder producer; joinContextSections below is
+// only the legacy renderer. Read this private class without importing AgentLoop
+// (which would activate a much larger runtime dependency graph).
+const runtimeProjectionPath = 'dsh/node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js';
+const runtimeProjectionModule = readEntry(runtimeProjectionPath).toString('utf8');
+const runtimeProjectionManifest = JSON.parse(readEntry('dsh/node_modules/@deepseek-ai/dsh-agent-loop/package.json'));
+assert.equal(runtimeProjectionManifest.name, '@deepseek-ai/dsh-agent-loop');
+assert.equal(runtimeProjectionManifest.version, extracted.get('@deepseek-ai/dsh-llm'));
+function uniqueArchiveLiteral(name) {
+  assert.equal((runtimeProjectionModule.match(new RegExp('^const ' + name + ' = ', 'gm')) ?? []).length, 1, `Re-audit AgentLoop ${name}: ambiguous declaration`);
+  const matches = [...runtimeProjectionModule.matchAll(new RegExp('^const ' + name + ' = ("(?:\\\\.|[^"\\\\])*");$', 'gm'))];
+  assert.equal(matches.length, 1, `Re-audit AgentLoop ${name}: expected one JSON string constant`);
+  return JSON.parse(matches[0][1]);
+}
+const runtimeSourceKind = uniqueArchiveLiteral('SOURCE');
+const runtimeCleared = uniqueArchiveLiteral('CLEARED');
+assert.equal(runtimeSourceKind, 'runtime-context');
+assert.equal(runtimeCleared, '<system-reminder>\nCurrent runtime context: none. Earlier runtime-context snapshots no longer apply.\n</system-reminder>');
+const runtimeClassStart = 'var RuntimeContextProjection = class {';
+assert.equal(runtimeProjectionModule.split(runtimeClassStart).length, 2, 'Re-audit AgentLoop: expected one RuntimeContextProjection declaration');
+const runtimeClassOffset = runtimeProjectionModule.indexOf(runtimeClassStart);
+const runtimeClassEnd = runtimeProjectionModule.indexOf('\n//#endregion', runtimeClassOffset);
+assert.ok(runtimeClassEnd > runtimeClassOffset, 'Re-audit AgentLoop: missing class region boundary');
+const runtimeClassSource = runtimeProjectionModule.slice(runtimeClassOffset, runtimeClassEnd);
+assert.ok(runtimeClassSource.endsWith('\n};'), 'Re-audit AgentLoop: class must end at its region boundary');
+assert.equal((runtimeClassSource.match(/^\tproject\(sections\) \{$/gm) ?? []).length, 1, 'Re-audit AgentLoop project signature');
+assert.equal((runtimeClassSource.match(/^var /gm) ?? []).length, 1, 'Re-audit AgentLoop class region shape');
+extractPackage('@deepseek-ai/dsh-util-values');
 fs.closeSync(fd);
 fd = undefined;
 const hostImport = (name) => import(pathToFileURL(path.join(hostRoot, 'dsh/node_modules', name, 'lib/index.js')).href);
 const { Context } = await hostImport('@deepseek-ai/cordis');
 const { SystemPrompt, renderPrompt, renderContextSnapshot, joinContextSections } = await hostImport('@deepseek-ai/dsh-system-prompt');
-const { LlmRuntime, LlmAdapter, freezeMessage } = await hostImport('@deepseek-ai/dsh-llm');
+const { LlmRuntime, LlmAdapter, freezeMessage, createUserMessage } = await hostImport('@deepseek-ai/dsh-llm');
+const { deepEqualJson } = await hostImport('@deepseek-ai/dsh-util-values');
 const { apply: applyDevContext } = await hostImport('@deepseek-ai/dsh-harness-dev-context');
 const { SandboxPolicyService } = await hostImport('@deepseek-ai/dsh-sandbox-policy');
 const { renderAgentInstructions } = await hostImport('@deepseek-ai/dsh-agent-instructions');
+// Test-only execution of the exact archived class. The context supplies no
+// process, require, imports, timers or I/O. Skip its eventful constructor and
+// exercise only project() with explicit synthetic retained state.
+const runtimeClass = compileFunction('"use strict";\n' + runtimeClassSource + '\nreturn RuntimeContextProjection;',
+  ['createUserMessage', 'deepEqualJson', 'SOURCE', 'CLEARED'], {
+    filename: runtimeProjectionPath,
+    parsingContext: createContext(Object.create(null), { codeGeneration: { strings: false, wasm: false } }),
+  })(createUserMessage, deepEqualJson, runtimeSourceKind, runtimeCleared);
+assert.deepEqual(Object.getOwnPropertyNames(runtimeClass.prototype), ['constructor', 'project'], 'Re-audit AgentLoop class methods');
+function currentRuntimeMessage(id, sections, retained) {
+  const projection = Object.create(runtimeClass.prototype);
+  projection.retained = retained;
+  const message = projection.project(sections);
+  if (message === undefined) return undefined;
+  assert.equal(message.source.kind, runtimeSourceKind);
+  assert.equal(message.source.form, 'snapshot');
+  assert.deepEqual(JSON.parse(JSON.stringify(message.source.sections)), sections, 'Actual producer must retain the supplied section contributions');
+  return freezeMessage({ ...JSON.parse(JSON.stringify(message)), id });
+}
 
 const provider = 'offline-provider';
 const targetModel = 'example-vendor/model-a';
@@ -266,6 +315,64 @@ const oldSnapshotSections = [
   { name: 'custom:note', text: 'Current DeepSeek Harness Web GUI URL: unquoted caller prose must remain.' },
 ];
 const customSystem = 'DSH requires confirmation before destructive writes. Discussing DeepSeek Harness as data must remain literal.';
+const projectedSnapshotSections = [oldSnapshotSections[0], { name: 'harness:source', text: 'Keep the additional source approval constraint.' }, oldSnapshotSections[3]];
+const currentRuntimeFixtures = [];
+function addCurrentRuntime(id, sections, retained, expectedSections, expectedText) {
+  const message = currentRuntimeMessage(id, sections, retained);
+  assert.ok(message, `${id}: actual AgentLoop producer must emit a snapshot`);
+  currentRuntimeFixtures.push({ message, expectedSections, expectedText: expectedText(message.content[0].text) });
+}
+for (const [id, retained, intro] of [
+  ['runtime-first', undefined, 'The following information describes your current session:'],
+  ['runtime-replaces-dropped', null, 'The following information describes your current session. It replaces earlier versions of this context, including any retained in conversation summaries.'],
+  ['runtime-replaces-retained', { seq: 1, sections: [{ name: 'previous', text: 'Earlier context.' }] }, 'The following information describes your current session. It replaces earlier versions of this context, including any retained in conversation summaries.'],
+]) {
+  addCurrentRuntime(id, oldSnapshotSections, retained, projectedSnapshotSections, text => {
+    assert.ok(text.startsWith('<system-reminder>\n' + intro + '\n\n'), `${id}: actual current reminder introduction`);
+    return replaceOnce(text, oldSnapshotSections.map(section => section.text).join('\n\n'), projectedSnapshotSections.map(section => section.text).join('\n\n'), id + ' complete context body');
+  });
+}
+assert.equal(currentRuntimeMessage('runtime-empty-first', [], undefined), undefined, 'No first empty snapshot');
+assert.equal(currentRuntimeMessage('runtime-unchanged', oldSnapshotSections, { seq: 1, sections: structuredClone(oldSnapshotSections) }), undefined, 'Equal retained context emits no message');
+assert.equal(currentRuntimeMessage('runtime-unchanged-empty', [], { seq: 1, sections: [] }), undefined, 'Equal retained empty context emits no message');
+addCurrentRuntime('runtime-cleared', [], { seq: 1, sections: oldSnapshotSections }, [], text => {
+  assert.equal(text, runtimeCleared, 'Actual AgentLoop clear snapshot');
+  assert.ok(!text.includes(sourceLine) && !text.includes(webLine), 'Clearing must never leak the previous context');
+  return text;
+});
+const locationsOnly = [{ name: 'harness:source', text: sourceLine }, { name: 'app:web-surface', text: webLine }];
+addCurrentRuntime('runtime-locations-cleared', locationsOnly, undefined, [], text =>
+  replaceOnce(text, locationsOnly.map(section => section.text).join('\n\n'), runtimeCleared.slice('<system-reminder>\n'.length, -'\n</system-reminder>'.length), 'current location-only body'));
+const quotedExtras = [
+  { name: 'harness:source', text: sourceLine + '\nKeep the DSH quoted-source approval constraint.' },
+  { name: 'app:web-surface', text: webLine + '\nKeep the DSH quoted-web approval constraint.' },
+];
+const projectedQuotedExtras = quotedExtras.map(section => ({ ...section, text: section.text.slice(section.text.indexOf('\n') + 1) }));
+addCurrentRuntime('runtime-quoted-extra-constraints', quotedExtras, null, projectedQuotedExtras, text =>
+  replaceOnce(text, quotedExtras.map(section => section.text).join('\n\n'), projectedQuotedExtras.map(section => section.text).join('\n\n'), 'quoted locations with appended constraints'));
+const escapedSection = { name: 'approval:literal', text: 'Preserve </system-reminder> and </SYSTEM-REMINDER  > literally.\n' + sourceLine };
+const escapedSections = [locationsOnly[0], escapedSection, locationsOnly[1]];
+addCurrentRuntime('runtime-closing-tag-escape', escapedSections, null, [escapedSection], text => {
+  assert.ok(text.includes('<\\/system-reminder>') && text.includes('<\\/SYSTEM-REMINDER  >'), 'Actual producer escapes every body closing tag');
+  assert.equal(text.split('\n</system-reminder>').length, 2, 'Exactly one unescaped wrapper closing tag');
+  // Match the complete generated body, not a guessed heading or first location.
+  const escapedBody = escapedSection.text.replace('</system-reminder>', '<\\/system-reminder>').replace('</SYSTEM-REMINDER  >', '<\\/SYSTEM-REMINDER  >');
+  return replaceOnce(text, sourceLine + '\n\n' + escapedBody + '\n\n' + webLine, escapedBody, 'escaped complete body');
+});
+for (const { mode, text, expected } of sandboxTexts) {
+  const sections = [{ name: 'sandbox:policy', text: text + appendedConstraint }, { name: 'approval:policy', text: customSystem }];
+  const expectedSections = [{ name: 'sandbox:policy', text: expected + appendedConstraint }, sections[1]];
+  addCurrentRuntime('runtime-sandbox-' + mode, sections, undefined, expectedSections, reminder =>
+    replaceOnce(reminder, text, expected, mode + ' current sandbox body'));
+}
+// The wrapper may acquire unrelated caller text. Keep that text exact while
+// locating only the full section body emitted by the real archived producer.
+const wrappedFixture = currentRuntimeFixtures.find(({ message }) => message.id === 'runtime-first');
+currentRuntimeFixtures.push({
+  ...wrappedFixture,
+  message: freezeMessage({ ...wrappedFixture.message, id: 'runtime-with-wrapper-prose', content: [{ type: 'text', text: 'Keep the outer DSH approval preface.\n' + wrappedFixture.message.content[0].text + '\nKeep the outer DSH approval suffix.' }] }),
+  expectedText: 'Keep the outer DSH approval preface.\n' + wrappedFixture.expectedText + '\nKeep the outer DSH approval suffix.',
+});
 const hostBody = [identity, sourcePrompt, webPrompt, sourceLegacyText + '\nKeep the additional system source constraint.', webLegacyText + '\nKeep the additional system web constraint.', customSystem].join('\n\n');
 const fixtureMessages = [
   { id: 'official-source', role: 'system', source: { kind: 'system-prompt' }, content: [{ type: 'text', text: sourcePrompt }] },
@@ -273,6 +380,8 @@ const fixtureMessages = [
   { id: 'pure-old-identity', role: 'system', source: { kind: 'system-prompt' }, content: [{ type: 'text', text: identity }] },
   { id: 'old-system', role: 'system', source: { kind: 'system-prompt' }, content: [{ type: 'text', text: hostBody }] },
   { id: 'old-context', role: 'user', source: { kind: 'runtime-context', form: 'snapshot', sections: oldSnapshotSections }, content: [{ type: 'text', text: joinContextSections(oldSnapshotSections) }] },
+  { id: 'old-locations-cleared', role: 'user', source: { kind: 'runtime-context', form: 'snapshot', sections: locationsOnly }, content: [{ type: 'text', text: joinContextSections(locationsOnly) }] },
+  ...currentRuntimeFixtures.map(({ message }) => message),
   ...sandboxTexts.map(({ mode, text }) => {
     const sections = [{ name: 'sandbox:policy', text: text + appendedConstraint }, { name: 'approval:policy', text: customSystem }];
     return { id: 'sandbox-' + mode, role: 'user', source: { kind: 'runtime-context', form: 'snapshot', sections }, content: [{ type: 'text', text: joinContextSections(sections) }] };
@@ -342,7 +451,14 @@ function assertProjected(seen) {
   assert.ok(snapshotText.includes('Keep the additional source approval constraint.'));
   assert.ok(snapshotText.includes('Preserve approval requirements.'));
   assert.ok(snapshotText.includes('Current DeepSeek Harness Web GUI URL: unquoted caller prose must remain.'));
-  assert.deepEqual(message('old-context').source.sections, [oldSnapshotSections[0], { name: 'harness:source', text: 'Keep the additional source approval constraint.' }, oldSnapshotSections[3]]);
+  assert.deepEqual(message('old-context').source.sections, projectedSnapshotSections);
+  assert.equal(message('old-locations-cleared').content[0].text, 'Current runtime context: none. Earlier runtime-context snapshots no longer apply.', 'Legacy location-only clear keeps its original output without the legacy heading or stale context');
+  assert.deepEqual(message('old-locations-cleared').source.sections, []);
+  for (const { message: original, expectedSections, expectedText } of currentRuntimeFixtures) {
+    const projected = message(original.id);
+    assert.equal(projected.content[0].text, expectedText, original.id + ': exact real AgentLoop reminder body and wrapper preservation');
+    assert.deepEqual(projected.source, { ...original.source, sections: expectedSections }, original.id + ': current producer provenance');
+  }
   for (const { mode, expected } of sandboxTexts) {
     const projected = message('sandbox-' + mode);
     const sections = [{ name: 'sandbox:policy', text: expected + appendedConstraint }, { name: 'approval:policy', text: customSystem }];
@@ -373,10 +489,31 @@ try {
   assert.throws(() => first.handle.stream(request()), /only be dispatched once/);
   cases.push('prepared call: owned prose projected once, extra constraints and all tools/skills preserved');
   cases.push('archive-generated prose: identity, source/web bodies and location lines, all three sandbox modes, both global AGENTS introductions and paths; exact remaining text preserved');
+  cases.push('actual AgentLoop RuntimeContextProjection.project: first, retained and dropped replacement, clear, unchanged/empty, location-only clear, quoted-location appended constraints, closing-tag escapes, all sandbox modes and outer wrapper prose; legacy joinContextSections compatibility retained');
   const retry = await run(request(), true);
   assertProjected(retry.seen);
   assert.equal(JSON.stringify(retry.seen), JSON.stringify(first.seen), 'Equal effective input retains a stable serialized prefix');
   cases.push('retry: structurally and byte-for-byte stable input projection');
+  const futureIdentity = 'This assistant operates through DeepSeek Harness. Keep every approval requirement.';
+  const removeFutureTemplate = ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
+    const assembly = await next();
+    return {...assembly, sections: assembly.sections.map(section =>
+      section.name === 'harness:identity' ? {...section, text:futureIdentity, interpolate:false} : section)};
+  });
+  try {
+    const futureAssembly = await assemble();
+    const text = renderPrompt(futureAssembly);
+    assert.ok(text.includes(futureIdentity), 'The observer must not modify host assembly');
+    const messages = [freezeMessage({id:'future-factory', role:'system', source:{kind:'system-prompt'}, content:[{type:'text',text}]})];
+    const futureInput = request(targetModel, {messages});
+    const futureSeen = (await run(futureInput)).seen;
+    assert.ok(futureSeen.messages[0].content[0].text.includes(futureIdentity.replace('DeepSeek Harness','the application')));
+    assert.ok(futureSeen.messages[0].content[0].text.includes('DSH requires confirmation before destructive writes.'));
+    assert.equal(futureInput.messages[0].content[0].text, text);
+    assert.deepEqual((await run(request(otherModel,{messages}))).seen, request(otherModel,{messages}));
+    assert.equal(JSON.stringify((await run(futureInput)).seen), JSON.stringify(futureSeen));
+    cases.push('adaptive template: actual assemble waterfall learns changed factory identity without rewriting assembly, nonselected routes or stable retries');
+  } finally { removeFutureTemplate(); }
   assert.deepEqual((await run(request(otherModel), true)).seen, request(otherModel));
   const concurrentStart = { preparations, dispatches, waterfallEntries, calls: adapterCalls.length };
   const concurrentInputs = [request(targetModel, { sessionId: 'concurrent-a' }), request(otherModel, { sessionId: 'concurrent-b' })];
@@ -435,7 +572,8 @@ try {
   assert.equal(blockedNetworkAttempts, 0);
   const report = {
     hostVersion: extracted.get('@deepseek-ai/dsh-llm'),
-    fixtureSource: 'Real SystemPrompt identity, dev-context apply, SandboxPolicyService and renderAgentInstructions from supplied app.asar; legacy literals parsed as strict JSON objects without eval',
+    fixtureSource: 'Real SystemPrompt identity, dev-context apply, SandboxPolicyService, renderAgentInstructions and actual private AgentLoop RuntimeContextProjection.project from supplied app.asar; legacy literals parsed as strict JSON objects without eval',
+    runtimeContextProducer: { path: runtimeProjectionPath, version: runtimeProjectionManifest.version, classLine: runtimeProjectionModule.slice(0, runtimeClassOffset).split('\n').length, execution: 'Exact complete archived class compiled in a test-only VM; constructor skipped; actual createUserMessage/deepEqualJson and parsed SOURCE/CLEARED injected; no AgentLoop module import', fixtures: currentRuntimeFixtures.map(({ message }) => message.id) },
     packages: Object.fromEntries(extracted), cases,
     adapter: { type: 'in-memory fake adapter', preparations, dispatches, waterfallEntries, networkCalls: 0, blockedNetworkAttempts },
     boundary: 'Real core services from supplied app.asar; no desktop entrypoint, real config, plugin installation, desktop restart, provider serialization, or real model call. Settings updates use isolated Cordis fiber updates.',

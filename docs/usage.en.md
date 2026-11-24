@@ -4,9 +4,9 @@
 
 Unbrand 0.1.5 and later accept DSH Desktop `0.2.2-rc.1` or later, including later prereleases. This minimum is an installation requirement, not a list of tested versions. Unrecognized prompt text passes through unchanged. If the required model interface is missing or already owned by another plugin, Unbrand does not take it over. Standalone Web deployments have not been verified.
 
-These steps install **0.1.5**. If that version is not yet available on npm, use the matching GitHub Release archive.
+These steps install **0.1.6**. If that version is not yet available on npm, use the matching GitHub Release archive.
 
-1. In DSH Desktop, open **Plugins → Add plugin** and enter `dsh-unbrand@0.1.5`. Alternatively, download `dsh-unbrand-0.1.5.tgz` from the [GitHub release](https://github.com/MaRi23333/dsh-unbrand/releases/tag/v0.1.5) and enter its full path without extracting it.
+1. In DSH Desktop, open **Plugins → Add plugin** and enter `dsh-unbrand@0.1.6`. Alternatively, download `dsh-unbrand-0.1.6.tgz` from the [GitHub release](https://github.com/MaRi23333/dsh-unbrand/releases/tag/v0.1.6) and enter its full path without extracting it.
 2. Enable the plugin. If prompted to restart, quit DSH from its application menu and reopen it.
 3. Open **Settings → Unbrand**, select a model, and save. The change applies to the next request.
 
@@ -27,6 +27,12 @@ For a model missing from the catalog, open **Model missing? Add it manually** an
 
 Rules are case-sensitive, exact matches with no wildcards. Saved rules remain available when a model disappears from the catalog. Disable filtering or remove all rules and save to leave subsequent requests unchanged.
 
+## Host updates and adaptation
+
+Version 0.1.6 aligns the complete runtime body with its provenance. It preserves wrappers, other context, and closing-tag escaping. During normal prompt assembly it observes only the generated `harness:identity`, `harness:source`, and `app:web-surface` sections. An observed complete factory paragraph can use a full-product-name fallback when its wording changes. The plugin uses the existing prompt assembly and holds observed sections in memory for the lifetime of the plugin.
+
+Code, paths, and other plugins’ paragraphs remain intact. Renamed provenance, redacted or ambiguous bodies, and unobserved new templates in old history are left unchanged. The context viewer and saved history still show the original content. Reload the plugin to use an updated implementation.
+
 ## Before you start
 
 - Replaces fixed identity text and designated runtime-location lines. The sandbox notice loses only the product name; permission modes, writable paths and approval instructions are preserved. A leading source heading for the user's global `AGENTS.md` is labeled as user-global; instruction text and project headings stay intact. Unrecognized sources or layouts are left unchanged.
@@ -36,4 +42,4 @@ Rules are case-sensitive, exact matches with no wildcards. Saved rules remain av
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for feedback and development, and [CHANGELOG.md](../CHANGELOG.md) for version notes.
 
-[MIT License](../LICENSE). This is an independent community project, with no affiliation with or endorsement by DeepSeek.
+This is an independent community project, with no affiliation with or endorsement by DeepSeek. [Apache-2.0 license](../LICENSE) · [Third-party notices](../THIRD_PARTY_NOTICES.md)

@@ -1,12 +1,12 @@
 {
   "name": "dsh-unbrand",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
   "repository": { "type": "git", "url": "git+https://github.com/MaRi23333/dsh-unbrand.git" },
   "homepage": "https://github.com/MaRi23333/dsh-unbrand#readme",
   "bugs": { "url": "https://github.com/MaRi23333/dsh-unbrand/issues" },
   "description": "Use a neutral introduction instead of the default DeepSeek Harness prompt for selected models.",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": ["deepseek-harness", "dsh-plugin", "model-context", "system-prompt"],
   "type": "module",
   "exports": {
@@ -19,6 +19,7 @@
   },
   "files": [
     "index.js",
+    "adaptive.js",
     "policy.js",
     "settings.js",
     "client.js",
